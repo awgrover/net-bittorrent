@@ -3,6 +3,7 @@ package Net::BitTorrent::Protocol::BEP05::Bucket;
     use Moose;
     use Moose::Util::TypeConstraints;
     use AnyEvent;
+    use Bit::Vector::Overload;
     use lib '../../../../../lib';
     use Net::BitTorrent::Types qw[NBTypes::DHT::NodeID];
     use 5.010.000;
@@ -114,7 +115,7 @@ package Net::BitTorrent::Protocol::BEP05::Bucket;
     sub _build_find_node_quest {
         my ($self) = @_;
         $self->dht->find_node(
-            $self->middle,
+            $self->middle ^ $self->dht->nodeid,
             sub {
                 require Scalar::Util;
                 Scalar::Util::weaken($self) if !Scalar::Util::isweak($self);
