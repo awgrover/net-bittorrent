@@ -56,6 +56,9 @@ package Net::BitTorrent::Protocol::BEP05::Bucket;
     }
     around 'add_node' => sub {
         my ($code, $self, $node) = @_;
+
+        return if $self->find_node($node);
+
         if ($self->count_nodes == $K) {
             if ($self->_id eq
                 $self->routing_table->nearest_bucket($self->dht->nodeid)->_id)
@@ -63,20 +66,15 @@ package Net::BitTorrent::Protocol::BEP05::Bucket;
             }
             return $self->add_backup_node($node);
         }
-        return if $self->grep_nodes(
-            sub {
-                $_->nodeid->Lexicompare($node->nodeid) == 0;
-            }
-        );
+
         $code->($self, $node);
         return $node->assign_bucket($self);
     };
     around 'add_backup_node' => sub {
         my ($code, $self, $node) = @_;
         return if $self->count_backup_nodes == $K;
-        return
-            if $self->grep_backup_nodes(
-                         sub { $_->nodeid->Lexicompare($node->nodeid) == 0 });
+        return if $self->find_node($node);
+        $node->assign_bucket($self);
         return $code->($self, $node);
     };
     has 'routing_table' => (
@@ -177,6 +175,17 @@ package Net::BitTorrent::Protocol::BEP05::Bucket;
             $self->routing_table->assign_node($_) for @nodes;
         }
         return 1;
+    }
+
+    sub find_node {
+        my ($self, $node) = @_;
+        # We always want to know if a node is "known of"
+        $self->first_node(
+            sub { $_->nodeid->Lexicompare($node->nodeid) == 0; }
+        )
+        || $self->first_backup_node(
+            sub { $_->nodeid->Lexicompare($node->nodeid) == 0; }
+        );
     }
 
     sub _del_node {
