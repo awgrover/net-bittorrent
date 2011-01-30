@@ -2,6 +2,8 @@ package Net::BitTorrent::DHT;
 {
     use Moose;
     use AnyEvent;
+    use Data::Dumper;
+    use Carp;
     use lib '../../../lib';
     use Net::BitTorrent::Protocol::BEP03::Bencode qw[:all];
     use Net::BitTorrent::Protocol::BEP05::Packets qw[:all];
@@ -109,7 +111,6 @@ package Net::BitTorrent::DHT;
                       is  => 'ro',
                       lazy_build => 1,
                       handles    => {
-                                  ipv4_add_node => 'add_node',
                                   ipv4_buckets  => 'buckets'
                       }
     );
@@ -118,7 +119,6 @@ package Net::BitTorrent::DHT;
                       is  => 'ro',
                       lazy_build => 1,
                       handles    => {
-                                  ipv6_add_node => 'add_node',
                                   ipv6_buckets  => 'buckets'
                       }
     );
@@ -131,27 +131,20 @@ package Net::BitTorrent::DHT;
         Net::BitTorrent::Protocol::BEP05::RoutingTable->new(dht => shift);
     }
 
-    sub add_node {
-        my ($s, $n) = @_;
-        require Net::BitTorrent::Protocol::BEP05::Node;
-        my $sockaddr = sockaddr($n->[0], $n->[1]);
+    sub find_or_add_node {
+        my ($s, $n, $sockaddr) = @_;
+        confess "Don't call with object, rather with [ip, port]" if blessed $n;
+
+        $sockaddr ||= sockaddr($n->[0], $n->[1]);
         return if !$sockaddr;
-        $n
-            = blessed $n ? $n
-            : Net::BitTorrent::Protocol::BEP05::Node->new(
-                           host          => $n->[0],
-                           port          => $n->[1],
-                           sockaddr      => $sockaddr,
-                           routing_table => (
-                               length $sockaddr == 28 ? $s->ipv6_routing_table
-                               : $s->ipv4_routing_table
-                           )
-            );
-        (  $n->ipv6
-         ? $s->ipv6_routing_table->add_node($n)
-         : $s->ipv4_routing_table->add_node($n)
-        )->find_node($s->nodeid);
+
+        my $table = length $sockaddr == 28 
+          ? $s->ipv6_routing_table 
+          : $s->ipv4_routing_table;
+
+        return $table->add_node($n);
     }
+
     my $boot_constraint;
     after 'BUILD' => sub {
         my ($self, $args) = @_;
@@ -160,7 +153,7 @@ package Net::BitTorrent::DHT;
             Moose::Util::TypeConstraints::create_parameterized_type_constraint(
                                           'ArrayRef[NBTypes::Network::Addr]');
         $boot_constraint->validate(@{$args->{'boot_nodes'}});
-        $self->add_node($_) for @{$args->{'boot_nodes'}};
+        $self->find_or_add_node($_)->find_node($self->nodeid) for @{$args->{'boot_nodes'}};
     };
 
     #
@@ -290,17 +283,7 @@ package Net::BitTorrent::DHT;
             $self->_inc_recv_invalid_length(length $data);
             return;
         }
-        my $node
-            = $self->ipv6_routing_table->find_node_by_sockaddr($sockaddr);
-        if (!defined $node) {
-            $node =
-                Net::BitTorrent::Protocol::BEP05::Node->new(
-                                   host          => $host,
-                                   port          => $port,
-                                   routing_table => $self->ipv6_routing_table,
-                                   sockaddr      => $sockaddr
-                );
-        }
+        my $node = $self->find_or_add_node([$host,$port], $sockaddr);
     }
 
     sub _on_udp4_in {
@@ -313,20 +296,10 @@ package Net::BitTorrent::DHT;
             || !defined $packet->{'y'})
         {   $self->_inc_recv_invalid_count;
             $self->_inc_recv_invalid_length(length $data);
+            warn "RECV Packet didn't decode (or had no ->{'y'}):".Dumper($packet);
             return;
         }
-        my $node
-            = $self->ipv4_routing_table->find_node_by_sockaddr($sockaddr);
-        if (!defined $node) {
-            require Net::BitTorrent::Protocol::BEP05::Node;
-            $node =
-                Net::BitTorrent::Protocol::BEP05::Node->new(
-                                   host          => $host,
-                                   port          => $port,
-                                   routing_table => $self->ipv4_routing_table,
-                                   sockaddr      => $sockaddr
-                );
-        }
+        my $node = $self->find_or_add_node([$host, $port], $sockaddr);
 
         # Basic identity checks
         # TODO - if v is set, make sure it matches
@@ -374,7 +347,7 @@ package Net::BitTorrent::DHT;
                                 = grep { !$seen{$_->[0]}{$_->[1]}++ }
                                 @{$quest->[2]}, @nodes;
                         }
-                        $self->ipv4_add_node($_) for @nodes;
+                        $self->find_or_add_node($_) for @nodes;
                         $quest->[1]->($quest->[0], $node, \@nodes);
                     }
                     elsif ($type eq 'get_peers') {
@@ -394,7 +367,7 @@ package Net::BitTorrent::DHT;
                                                        $packet->{'r'}{'nodes'}
                                 )
                                 )
-                            {   $new_node = $self->ipv4_add_node($new_node);
+                            {   $new_node = $self->find_or_add_node($new_node);
                                 $new_node->get_peers($req->{'info_hash'})
                                     if $new_node;
                             }
@@ -463,7 +436,9 @@ package Net::BitTorrent::DHT;
                     $self->_inc_recv_invalid_count;
                     $self->_inc_recv_invalid_length(length $data);
 
-                    #...;
+                    warn "Got a RECV, but $node wasn't expecting one for transaction ".$packet->{'t'};
+                    warn "   ".$packet->{'t'}.": outstanding " # .Dumper($node->outstanding_requests);
+                     .join(", ",map {"[$_] ".$node->get_request($_)->{'type'}} keys%{$node->outstanding_requests});
                 }
             }
         }
@@ -550,9 +525,9 @@ package Net::BitTorrent::DHT;
                 $x++, $bucket->floor->to_Hex, $bucket->count_backup_nodes;
             for my $node (@{$bucket->nodes}) {
                 push @return,
-                    sprintf '    %s %s:%d fail:%d seen:%d age:%s ver:%s',
+                    sprintf '    %s %s:%d fail:%d seen:%s age:%s ver:%s',
                     $node->nodeid->to_Hex, $node->host,
-                    $node->port, $node->fail || 0, $node->seen,
+                    $node->port, $node->fail || 0, __duration(time - $node->seen),
                     __duration(time - $node->birth), $node->v || '?';
             }
             $t_primary += $bucket->count_nodes;

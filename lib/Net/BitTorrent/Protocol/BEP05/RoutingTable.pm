@@ -2,6 +2,7 @@ package Net::BitTorrent::Protocol::BEP05::RoutingTable;
 {
     use Moose;
     use AnyEvent;
+    use Carp;
     use lib '../../../../../lib';
     use Net::BitTorrent::Protocol::BEP03::Bencode qw[:all];
     use Net::BitTorrent::Protocol::BEP05::Packets qw[:all];
@@ -38,22 +39,31 @@ package Net::BitTorrent::Protocol::BEP05::RoutingTable;
     );
     around 'add_node' => sub {
         my ($code, $self, $node) = @_;
-        if (!blessed $node) {
-            require Net::BitTorrent::Protocol::BEP05::Node;
-            $node =
-                Net::BitTorrent::Protocol::BEP05::Node->new(
-                                                        host => $node->[0],
-                                                        port => $node->[1],
-                                                        routing_table => $self
-                );
-        }
-        elsif (!$node->has_routing_table) { $node->_routing_table($self) }
+        confess "Don't call this with object, rather with [ip, port]" if blessed $node;
+        confess "Requires [ip, port]" if (ref($node) ne 'ARRAY' || scalar(@$node) != 2);
+
+        my $sockaddr = sockaddr($node->[0], $node->[1]);
+        return undef if !$sockaddr;
+
+        if (my $n = $self->find_node_by_sockaddr($sockaddr)) {
+          return $n;
+          }
+
+        require Net::BitTorrent::Protocol::BEP05::Node;
+        $node = Net::BitTorrent::Protocol::BEP05::Node->new(
+                                                    host => $node->[0],
+                                                    port => $node->[1],
+                                                    routing_table => $self,
+                                                    sockaddr => $sockaddr
+            );
         return $code->($self, $node->sockaddr, $node);
     };
+
     around 'del_node' => sub {
         my ($code, $self, $node) = @_;
         $code->($self, blessed($node) ? $node->sockaddr : $node);
     };
+
     after 'del_node' =>
         sub { $_[1]->bucket->_del_node($_[1]) if $_[1]->has_bucket };
     has 'buckets' => (
