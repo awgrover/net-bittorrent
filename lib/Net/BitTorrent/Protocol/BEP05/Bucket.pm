@@ -6,6 +6,7 @@ package Net::BitTorrent::Protocol::BEP05::Bucket;
     use Bit::Vector::Overload;
     use lib '../../../../../lib';
     use Net::BitTorrent::Types qw[NBTypes::DHT::NodeID];
+    use Net::BitTorrent::Network::Utility qw[unpack_sockaddr];
     use 5.010.000;
     our $MAJOR = 0; our $MINOR = 74; our $DEV = 13; our $VERSION = sprintf('%0d.%03d' . ($DEV ? (($DEV < 0 ? '' : '_') . '%03d') : ('')), $MAJOR, $MINOR, abs $DEV);
 
@@ -186,6 +187,18 @@ package Net::BitTorrent::Protocol::BEP05::Bucket;
         )
         || $self->first_backup_node(
             sub { $_->nodeid->Lexicompare($node->nodeid) == 0; }
+        );
+    }
+    
+    sub find_node_by_sockaddr {
+        my ($self, $sockaddr) = @_;
+        # We always want to know if a node is "known of"
+        my ($host, $port) = unpack_sockaddr($sockaddr);
+        $self->first_node(
+            sub { $_->host eq $host && $_->port == $port }
+        )
+        || $self->first_backup_node(
+            sub { $_->host eq $host && $_->port == $port }
         );
     }
 

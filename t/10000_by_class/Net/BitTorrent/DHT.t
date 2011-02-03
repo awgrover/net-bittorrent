@@ -38,7 +38,7 @@ package t::10000_by_class::Net::BitTorrent::DHT;
         $self->{'dht'}
             = new_ok('Net::BitTorrent', $self->new_args, 'decoy NB client')
             ->dht;
-        $self->{'dht'}->add_node($_)
+        $self->{'dht'}->find_or_add_node($_)
             for ['router.utorrent.com', 6881],
             ['router.bittorrent.com', 6881];
     }

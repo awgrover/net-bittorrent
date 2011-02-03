@@ -121,7 +121,7 @@ package Net::BitTorrent::Protocol::BEP05::RoutingTable;
         if (!$node) {
             for my $bucket (@{$self->buckets}) {
                 $node
-                    = $bucket->find_node($_);
+                    = $bucket->find_node_by_sockaddr($sockaddr);
                 last if $node;
             }
         }
