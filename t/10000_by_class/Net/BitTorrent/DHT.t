@@ -8,7 +8,6 @@ package t::10000_by_class::Net::BitTorrent::DHT;
     use lib '../../../../lib', 'lib';
     use 5.010.000;
     use Test::Moose;
-    use Test::More;
     use AnyEvent::Impl::Perl;   # Timing is different than with EV. Go figure.
     use AnyEvent;
 
