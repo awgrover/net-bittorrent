@@ -153,6 +153,8 @@ package Net::BitTorrent::DHT;
             Moose::Util::TypeConstraints::create_parameterized_type_constraint(
                                           'ArrayRef[NBTypes::Network::Addr]');
         $boot_constraint->validate(@{$args->{'boot_nodes'}});
+
+        # ask the boot-nodes for nodes nearest me
         $self->find_or_add_node($_)->find_node($self->nodeid) for @{$args->{'boot_nodes'}};
     };
 
