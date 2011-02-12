@@ -11,185 +11,91 @@ package t::10000_by_class::Net::BitTorrent::DHT;
     use AnyEvent::Impl::Perl;   # Timing is different than with EV. Go figure.
     use AnyEvent;
 
+    our %RestoreFromMock;
+
     #
     sub class {'Net::BitTorrent::DHT'}
 
     sub new_args {
         my $t = shift;
-        require Net::BitTorrent;
         [                       #port              => [1337 .. 1339, 0],
-           on_listen_failure => sub {
-               my ($s, $a) = @_;
-               note $a->{'message'};
-               $t->{'cv'}->end if $a->{'protocol'} =~ m[udp];
-           },
-           on_listen_success =>
-               sub { my ($s, $a) = @_; note $a->{'message'}; }
         ];
     }
 
     #
     sub startup : Tests(startup => no_plan) {
         my $self = shift;
+
+        use Moose::Object;
+        %Moose::Object::RestoreFromMock = ();
+        Moose::Object->meta->add_method( mock => 
+            sub {
+                my $class =shift;
+                my ($name, $sub) = @_;
+
+                my $meta = $class->meta;
+                $Moose::Object::RestoreFromMock{$class}->{$name} = $meta->get_method($name);
+                $meta->add_around_method_modifier($name, $sub);
+                }
+            );
+
         use_ok $self->class;
         can_ok $self->class, 'new';
         explain $self->new_args;
         $self->{'dht'}
-            = new_ok('Net::BitTorrent', $self->new_args, 'decoy NB client')
-            ->dht;
-        $self->{'dht'}->find_or_add_node($_)
-            for ['router.utorrent.com', 6881],
-            ['router.bittorrent.com', 6881];
+            = new_ok($self->class, $self->new_args, 'decoy NB client');
     }
 
     sub setup : Test(setup) {
         my $self = shift;
     }
 
-    sub creation : Test {
-        my $self = shift;
-        isa_ok($self->{dht}, $self->class)
-            or $self->FAIL_ALL($self->class . '->new failed');
+    sub teardown : Test(teardown) {
+        while (my ($package, $replaced) = each %Moose::Object::RestoreFromMock) {
+            while (my ($sub, $was) = each %$replaced) {
+                # print "Revert ${package}::$sub to something $was\n";
+                my $meta = $package->meta;
+                $meta->remove_method($sub);
+                $meta->add_method($sub,$was);
+            }
+        }
     }
 
-    sub nodeid : Test {
+    sub nodeid : Test(no_plan) {
         my $pig = shift->{dht};
         ok($pig->nodeid, 'nodeid is defined');
+        isa_ok $pig->nodeid, 'Bit::Vector';
     }
 
-    sub check_role : Test( 1 ) {
-        my $self = shift;
-        ok $self->{'dht'}->has_client,
-            '... standard dht nodes have a parent client';
-    }
+    sub talks_to_boot_nodes : Test(no_plan) {
+        my $tester=shift;
 
-    sub _000_init : Test( startup ) {
-        my $s = shift;
-        note 'Adding condvar for later use...';
-        $s->{'cv'} = AE::cv();
-        $s->{'cv'}->begin(sub { $s->{'cv'}->send });
-        note '...which will timeout in 2m.';
-        $s->{'to'} = AE::timer(
-            60 * 2,
-            0,
-            sub {
-                note sprintf 'Timeout waiting for %s!', join ', ',
-                    keys %{$s->{'todo'}};
-                $s->{'cv'}->send;
-            }
-        );
-    }
+        my $saw_find_node = undef;
 
-    sub wait : Test( shutdown => no_plan ) {
-        my $s = shift;
-        $s->{'cv'}->end;
-        $s->{'cv'}->recv;
-    }
-
-    sub quest_find_node : Test( no_plan ) {
-        my $s = shift;
-        $s->{'todo'}{'find_node'}++;
-        $s->{'cv'}->begin;
-        my $l = join '', map { [0 .. 9, 'a' .. 'f']->[int rand(16)] } 1 .. 40;
-        note 'Seeking nodes near ' . $l;
-        $s->{'quest'}{'find_node'} = $s->{'dht'}->find_node(
-            $l,
-            sub {
-                my ($tar, $nd, $pr) = @_;
-                subtest 'find_node callback' => sub {
-                    plan tests => 3;
-                    isa_ok($tar, 'Bit::Vector',
-                           'Target isa a Bit::Vector object');
-                    isa_ok($nd,
-                           'Net::BitTorrent::Protocol::BEP05::Node',
-                           'Node is a ...::Node');
-                    is ref $pr, 'ARRAY',
-                        'List of close nodes is... a list... of addrs?';
-                    note sprintf
-                        'We found %d nodes near %s from [\'%s\', %d] via DHT',
-                        scalar(@$pr),
-                        $tar->to_Hex, $nd->host, $nd->port;
-                    note join ', ', map { sprintf '[\'%s\', %d]', @$_ } @$pr;
-                    delete $s->{'todo'}{'find_node'};
+        use Net::BitTorrent::Protocol::BEP05::Node;
+        Net::BitTorrent::Protocol::BEP05::Node->mock( 'find_node', sub{ 
+            my $super=shift;
+            my $self = shift;
+            my ($target) = @_;
+            isa_ok $self, 'Net::BitTorrent::Protocol::BEP05::Node';
+            (isa_ok $target, 'Bit::Vector') && do {
+                if ($self->dht->nodeid ne $target) {
+                    warn "Saw target node ".ref($target)." $target vs ",ref($self->dht->nodeid);
+                    return;
+                    }
                 };
-                state $done = 0;
-                $s->{'cv'}->end if !$done++;
-            }
-        );
-        ok($s->{'quest'}{'find_node'});
-        is ref $s->{'quest'}{'find_node'}, 'ARRAY',
-            'find_node quest is an array reference';
-    }
+            is $self->dht->nodeid, $target, 'advertised dht';
+            $saw_find_node=1;
+            } );
 
-    sub quest_announce_peer : Test( no_plan ) {
-        my $s = shift;
-        $s->{'todo'}{'announce_peer'}++;
-        $s->{'cv'}->begin;
-        $s->{'ih'} = '6d0f88e9646c0f3a01bc35d0b0845db3247e6260';
-        $s->{'po'} = $s->{'dht'}->port;
-        note sprintf 'Pretending we are serving %s on port %d', $s->{'ih'},
-            $s->{'po'};
-        $s->{'quest'}{'announce_peer'} = $s->{'dht'}->announce_peer(
-            $s->{'ih'},
-            $s->{'po'},
-            sub {
-                my ($infohash, $node, $port) = @_;
-                subtest 'announce_peer_callback' => sub {
-                    plan tests => 3;
-                    isa_ok($infohash, 'Bit::Vector',
-                           'Infohash isa a Bit::Vector object');
-                    isa_ok($node,
-                           'Net::BitTorrent::Protocol::BEP05::Node',
-                           'Node is a ...::Node');
-                    ok $port =~ m[^\d+$], 'Port is... a number';
-                    note sprintf
-                        'Announced %s on port %d with [\'%s\', %d] (%s)',
-                        $infohash->to_Hex, $port, $node->host, $node->port,
-                        $node->nodeid->to_Hex;
-                    delete $s->{'todo'}{'announce_peer'};
-                };
-                state $done = 0;
-                $s->{'cv'}->end if !$done++;
-            }
-        );
-        ok($s->{'quest'}{'announce_peer'});
-        is ref $s->{'quest'}{'announce_peer'}, 'ARRAY',
-            'announce_peer quest is an array reference';
-    }
+        my $dht = $tester->class->new( boot_nodes => [ ['10.5.98.12',1234], ['10.23.8.55',7899] ] );
+        is $saw_find_node, 1, 'saw advertisement'
 
-    sub quest_get_peers : Test( no_plan ) {
-        my $s = shift;
-        $s->{'todo'}{'get_peers'}++;
-        $s->{'cv'}->begin;
-        note 'Seeking peers with ', $s->{'ih'};
-        $s->{'quest'}{'get_peers'} = $s->{'dht'}->get_peers(
-            $s->{'ih'},
-            sub {
-                my ($ih, $nd, $pr) = @_;
-                subtest 'get_peers callback' => sub {
-                    plan tests => 3;
-                    isa_ok($ih, 'Bit::Vector',
-                           'Infohash isa a Bit::Vector object');
-                    isa_ok($nd,
-                           'Net::BitTorrent::Protocol::BEP05::Node',
-                           'Node is a ...::Node');
-                    is ref $pr, 'ARRAY',
-                        'List of peers is... a list... of peers?';
-                    note sprintf
-                        'We found %d peers for %s from [\'%s\', %d] via DHT',
-                        scalar(@$pr),
-                        $ih->to_Hex, $nd->host, $nd->port;
-                    note join ', ', map { sprintf '[\'%s\', %d]', @$_ } @$pr;
-                    delete $s->{'todo'}{'get_peers'};
-                };
-                state $done = 0;
-                $s->{'cv'}->end if !$done++;
-            }
-        );
-        ok($s->{'quest'}{'get_peers'});
-        is ref $s->{'quest'}{'get_peers'}, 'ARRAY',
-            'get_peers quest is an array reference';
-    }
+        #substitute a test for an existing method
+        # all other calls should fail
+        # calls to certain methods let us do tests
+        # certain methods must be called
+        }
 
     #
     __PACKAGE__->runtests() if !caller;

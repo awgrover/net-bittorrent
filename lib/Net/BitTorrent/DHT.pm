@@ -599,11 +599,15 @@ The constructor accepts a number different arguments which all greatly affect
 the function of your DHT node. Any combination of the following arguments may
 be used during construction.
 
+For brevity, the following examples assume you are building a
+L<standalone node|Net::BitTorrent::DHT::Standalone> (for reasearch, etc.).
+
+=head2 Net::BitTorrent::DHT->new( client => ... )
+
 Note that L<standalone|Net::BitTorrent::DHT::Standalone> DHT nodes do not
 support or require the C<client> argument but internally a
 L<Net::BitTorrent|Net::BitTorrent> client is passed and serves as the parent
-of this node. For brevity, the following examples assume you are building a
-L<standalone node|Net::BitTorrent::DHT::Standalone> (for reasearch, etc.).
+of this node. 
 
 =head2 Net::BitTorrent::DHT->new( nodeid => 'F' x 40 )
 
@@ -648,6 +652,17 @@ Opens a specific UDP port number to the outside world on both IPv4 and IPv6.
 
 Note that when handed a list of ports, they are each tried until we are able
 to bind to the specific port.
+
+=head2 Net::BitTorrent::DHT->new( boot_nodes => ... )
+
+Initialize the DHT with a list of nodes to talk to. The list is pairs of ip,port:
+
+  Net::BitTorrent::DHT->new( boot_nodes => [ ['10.5.98.12',1234], ['10.23.8.55',7899] ] )
+
+The DHT must get initial nodes somehow. A Tracker can provide them, or you can initialize them.
+
+The DHT will immediately start talking to the nodes to initialize it's routing-table,
+and incidentally announce itself to those nodes.
 
 =head1 Net::BitTorrent::DHT->find_node( $target, $callback )
 
@@ -862,6 +877,10 @@ a list of the IPv6-based routing table's bucket structure.
     # After some time has passed...
     $node->dump_ipv6_buckets; # prints to STDOUT with say
     my @dump = $node->dump_ipv6_buckets; # returns list of lines
+
+=head1 References
+
+http://www.bittorrent.org/beps/bep_0005.html
 
 =head1 Author
 
