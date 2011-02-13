@@ -39,18 +39,19 @@ package Net::BitTorrent::DHT;
     };
 
     #
-    for my $type (qw[requests replies]) {
-        for my $var (qw[count length]) {
-            my $attr = join '_', '', 'recv_invalid', $var;
-            has $attr => (isa      => 'Int',
-                          is       => 'ro',
-                          init_arg => undef,
-                          traits   => ['Counter'],
-                          handles  => {'_inc' . $attr => 'inc'},
-                          default  => 0
-            );
-            for my $dir (qw[recv send]) {
-                my $attr = join '_', '', $dir, $type, $var;
+    for my $var (qw[count length]) {
+        my $attr = join '_', '_recv_invalid', $var;
+        has $attr => (isa      => 'Int',
+                      is       => 'ro',
+                      init_arg => undef,
+                      traits   => ['Counter'],
+                      handles  => {'_inc' . $attr => 'inc'},
+                      default  => 0
+        );
+
+        for my $dir (qw[_recv _send]) {
+            for my $type (qw[requests replies]) {
+                my $attr = join '_', $dir, $type, $var;
                 has $attr => (isa      => 'Int',
                               is       => 'ro',
                               init_arg => undef,
