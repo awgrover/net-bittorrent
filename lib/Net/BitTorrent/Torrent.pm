@@ -195,16 +195,17 @@ package Net::BitTorrent::Torrent;
                     return if !@{$source->[2]};
                     require Net::BitTorrent::Protocol::BEP03::Peer::Outgoing;
                     my $x = 1;
+
                     for ($self->_count_peers .. $self->max_peers) {
                         $self->client->add_peer(
-                             Net::BitTorrent::Protocol::BEP03::Peer::Outgoing
-                                 ->new(
-                                 torrent => $self,
-                                 connect =>
-                                     $source->[2]->[rand @{$source->[2]}],
-                                 source => 'dht',
-                                 client => $self->client
-                                 )
+                              Net::BitTorrent::Protocol::BEP03::Peer::Outgoing
+                                  ->new(
+                                     torrent => $self,
+                                     connect =>
+                                         $source->[2]->[rand @{$source->[2]}],
+                                     source => 'dht',
+                                     client => $self->client
+                                  )
                         );
                         last if $x == 3;
                     }
@@ -224,16 +225,17 @@ package Net::BitTorrent::Torrent;
                     return if !@{$source->[2]};
                     require Net::BitTorrent::Protocol::BEP03::Peer::Outgoing;
                     my $x = 1;
+
                     for ($self->_count_peers .. $self->max_peers) {
                         $self->client->add_peer(
-                             Net::BitTorrent::Protocol::BEP03::Peer::Outgoing
-                                 ->new(
-                                 torrent => $self,
-                                 connect =>
-                                     $source->[2]->[rand @{$source->[2]}],
-                                 source => 'tracker',
-                                 client => $self->client
-                                 )
+                              Net::BitTorrent::Protocol::BEP03::Peer::Outgoing
+                                  ->new(
+                                     torrent => $self,
+                                     connect =>
+                                         $source->[2]->[rand @{$source->[2]}],
+                                     source => 'tracker',
+                                     client => $self->client
+                                  )
                         );
                         last if $x == 3;
                     }
@@ -370,7 +372,7 @@ package Net::BitTorrent::Torrent;
                                _unset_piece => 'Bit_Off',
                                has_piece    => 'bit_test',
                                seed         => 'is_full'
-                   },
+                   }
     );
     sub _build_have { '0' x $_[0]->piece_count }
     after '_set_piece' => sub {
