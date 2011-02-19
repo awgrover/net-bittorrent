@@ -22,16 +22,17 @@ package Net::BitTorrent::Network::Utility;
     sub sockaddr ($$) {
         my $done = 0;
         my $return;
+        my $cv = AE::cv;
         AnyEvent::Socket::resolve_sockaddr(
             $_[0],
             $_[1],
             0, undef, undef,
             sub {
                 $return = $_[0]->[3];
-                $done++;
+                $cv->send;
             }
         );
-        AnyEvent->one_event while !$done; # FIXME: shouldn't this use a condvar?
+        $cv->recv;
         return $return;
     }
 
