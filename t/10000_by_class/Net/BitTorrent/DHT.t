@@ -121,16 +121,14 @@ sub listens : Tests {
     use Net::BitTorrent::Network::Utility;
     state $ip6=0;
     Net::BitTorrent::Network::Utility
-        ->mock('server', sub {confess "Called twice" if ++$ip6 > 1; undef},)
+        ->mock('server')
         ->with(0 => qr/:/, 4 => 'udp' )
         ->once
-        #->returns('Net::BitTorrent::Network::Utility');
         ;
     Net::BitTorrent::Network::Utility
         ->mock('server')
         ->with(0 => qr/\./, 4 => 'udp' )
         ->once
-        #->returns('Net::BitTorrent::Network::Utility');
         ;
 
     my $dht = $tester->class->new;
