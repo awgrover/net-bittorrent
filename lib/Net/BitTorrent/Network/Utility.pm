@@ -31,7 +31,7 @@ package Net::BitTorrent::Network::Utility;
                 $done++;
             }
         );
-        AnyEvent->one_event while !$done;
+        AnyEvent->one_event while !$done; # FIXME: shouldn't this use a condvar?
         return $return;
     }
 
@@ -46,7 +46,7 @@ package Net::BitTorrent::Network::Utility;
         $hex[8] = $hex[7] >> 8;
         $hex[7] = $hex[6] & 0xff;
         $hex[6] >>= 8;
-        my $return = sprintf '%X:%X:%X:%X:%X:%X:%D:%D:%D:%D', @hex;
+        my $return = sprintf '%.4X:%.4X:%.4X:%.4X:%.4X:%.4X:%D:%D:%D:%D', @hex;
         $return =~ s|(0+:)+|:|x;
         $return =~ s|^0+    ||x;
         $return =~ s|^:+    |::|x;

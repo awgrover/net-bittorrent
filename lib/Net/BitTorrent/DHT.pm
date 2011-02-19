@@ -38,7 +38,7 @@ package Net::BitTorrent::DHT;
         $s->udp4;
     };
 
-    #
+    # Stats of sent/received requests
     for my $var (qw[count length]) {
         my $attr = join '_', '_recv_invalid', $var;
         has $attr => (isa      => 'Int',
@@ -62,6 +62,7 @@ package Net::BitTorrent::DHT;
             }
         }
     }
+
     has 'nodeid' => (isa        => 'NBTypes::DHT::NodeID',
                      is         => 'ro',
                      lazy_build => 1,
