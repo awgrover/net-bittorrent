@@ -46,6 +46,7 @@ my $mb = $class->new(
                         'File::Temp'                 => 0,
                         'Module::Build'              => 0.30,
                         perl                         => '5.10.0',
+                        'SmartMatch::Sugar'          => 0,
                         'TAP::Harness'               => 3.18,
                         'Test::Class'                => 0.35,
                         'Test::Exception'            => 0,

@@ -186,6 +186,12 @@ package Net::BitTorrent::DHT;
 
     sub get_peers {
         my ($self, $infohash, $code) = @_;
+        # The $infohash is what you are looking for.
+        # Will call $code($infohash,$responding_node, @peer_ip_ports)
+        #   IFF some node found it ("values"),
+        #   but not for nodes-that-are-closer ("nodes").
+        # $code could get called multiple times, with same values.
+
         $onesixty_constraint //=
             Moose::Util::TypeConstraints::find_type_constraint(
                                                       'NBTypes::DHT::NodeID');

@@ -13,16 +13,15 @@ use 5.010.000;
 use Test::Moose;
 use AnyEvent::Impl::Perl;   # Timing is different than with EV. Go figure.
 use AnyEvent;
-use Test::Mock::Moose;
+use Test::Mock::Method;
 use Carp;
 use Net::BitTorrent::Protocol::BEP05::Packets::Render;
 use Data::Dumper;
-
-our %RestoreFromMock;
+use SmartMatch::Sugar;
 
 sub class {'Net::BitTorrent::DHT'}
 
-sub startup : Tests(startup => no_plan) {
+sub module_loads_and_can_new : Tests(startup => no_plan) {
     my $self = shift;
 
     use_ok $self->class;
@@ -36,7 +35,7 @@ sub setup : Test(setup) {
 sub teardown : Test(teardown) {
 }
 
-sub nodeid : Tests {
+sub nodeid_auto_and_explicit : Tests {
     my $self = shift;
     my $pig = new_ok($self->class, [], 'decoy NB client');
     ok($pig->nodeid, 'nodeid is defined');
@@ -47,13 +46,13 @@ sub nodeid : Tests {
     is $dht->nodeid->to_Dec, '12345', "nodeid can be set on new";
 }
 
-sub talks_to_boot_nodes : Tests {
+sub talks_to_boot_nodes_at_new : Tests {
     my $tester=shift;
 
     my $saw_find_node = undef;
 
     use Net::BitTorrent::Protocol::BEP05::Node;
-    Net::BitTorrent::Protocol::BEP05::Node->mock( 'find_node', sub{ 
+    Net::BitTorrent::Protocol::BEP05::Node->mock( 'find_node', sub{
         my $self = shift;
         my ($target) = @_;
         isa_ok $self, 'Net::BitTorrent::Protocol::BEP05::Node';
@@ -65,7 +64,8 @@ sub talks_to_boot_nodes : Tests {
             };
         is $self->dht->nodeid, $target, 'advertised dht';
         $saw_find_node=1;
-        } );
+        } )
+        ->with( 0 => inv_isa('Net::BitTorrent::Protocol::BEP05::Node'), 1 => inv_isa('Bit::Vector'));
 
     my $dht = $tester->class->new( boot_nodes => [ ['10.5.98.12',1234], ['10.23.8.55',7899] ] );
     is $saw_find_node, 1, 'saw advertisement'
@@ -77,7 +77,7 @@ sub sockaddr2ip {
     return ($ip, $port);
     }
 
-sub sends_data : Tests {
+sub sends_ping_to_boot_nodes_at_new : Tests {
     my $tester = shift;
     # Net::BitTorrent::DHT->mock( 'send' )->once;
     my @test_to_addrs = (['10.5.98.12',1234], ['FC12:3456:6789::', 1256]);
@@ -116,7 +116,7 @@ sub sends_data : Tests {
         }
     }
 
-sub listens : Tests {
+sub listens_at_new : Tests {
     my $tester=shift;
     use Net::BitTorrent::Network::Utility;
     state $ip6=0;
@@ -133,6 +133,24 @@ sub listens : Tests {
 
     my $dht = $tester->class->new;
     }
- 
+
+sub adds_nodes_to_correct_table : Tests {
+    my $tester = shift;
+
+    my $dht = $tester->class->new;
+
+    ok($dht->ipv6_routing_table, "has ipv6 routing table") or return;
+    ok($dht->ipv4_routing_table, "has ipv4 routing table") or return;
+
+    my @test_to_addrs = (['10.5.98.12',1234], ['FC12:3456:6789::', 1256]);
+    Net::BitTorrent::Protocol::BEP05::RoutingTable->mock('add_node', sub { warn "Mocked add_node called"; undef})
+        ->with(0 => $dht->ipv4_routing_table, 1 => $test_to_addrs[0]);
+    Net::BitTorrent::Protocol::BEP05::RoutingTable->mock('add_node', sub { warn "Mocked add_node called"; undef})
+        ->with(0 => $dht->ipv6_routing_table, 1 => $test_to_addrs[1]);
+    foreach my $ipp (@test_to_addrs) {
+        $dht->find_or_add_node($ipp);
+        }
+    }
+
 __PACKAGE__->runtests() if !caller;
 1;
