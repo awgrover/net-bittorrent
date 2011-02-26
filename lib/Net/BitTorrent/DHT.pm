@@ -186,11 +186,6 @@ package Net::BitTorrent::DHT;
 
     sub get_peers {
         my ($self, $infohash, $code) = @_;
-        # The $infohash is what you are looking for.
-        # Will call $code($infohash,$responding_node, @peer_ip_ports)
-        #   IFF some node found it ("values"),
-        #   but not for nodes-that-are-closer ("nodes").
-        # $code could get called multiple times, with same values.
 
         $onesixty_constraint //=
             Moose::Util::TypeConstraints::find_type_constraint(
@@ -200,7 +195,7 @@ package Net::BitTorrent::DHT;
         Scalar::Util::weaken $self;
         my $quest = [
             $infohash,
-            $code,
+            $code, # only called if a response has "values", maybe multiple times
             [],
             AE::timer(
                 0,
@@ -208,16 +203,18 @@ package Net::BitTorrent::DHT;
                 sub {
                     return if !$self;
                     for my $rt ($self->ipv6_routing_table,
-                                $self->ipv4_routing_table)
-                    {   for my $node (
+                                $self->ipv4_routing_table) {
+                        for my $node (
                                      @{$rt->nearest_bucket($infohash)->nodes})
-                        {   $node->get_peers($infohash);
+                        {   
+                        $node->get_peers($infohash);
                         }
                     }
                 }
             )
         ];
         $self->add_get_peers_quest($quest);
+        # the client must hold this ref, or it stops
         return $quest;
     }
 
@@ -734,7 +731,11 @@ Don't modify this.
 =head1 Net::BitTorrent::DHT->get_peers( $infohash, $callback )
 
 This method initiates a search for peers serving a torrent with this infohash.
-As they are found, the callback is called with the following arguments:
+If they are found, the callback is called (possibly multiple times) with the following arguments:
+
+You must keep the return value until you are satisfied (by answers or timeout).  
+You must let the ref-count go to zero when you are satisified, because the 
+search will keep trying every 15 seconds.
 
 =over
 
@@ -745,11 +746,11 @@ the same callback for multiple, concurrent C<get_peers( )> quests.
 
 =item * node
 
-This is a blessed object. TODO.
+This is the node that claimed to know the peer.
 
 =item * peers
 
-This is an array ref of peers sent to us by aforementioned remote node.
+This is an array ref of peers, [$ip, $port], sent to us by aforementioned remote node.
 
 =back
 
