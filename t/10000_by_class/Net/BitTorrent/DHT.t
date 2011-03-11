@@ -41,7 +41,7 @@ use Net::BitTorrent::Protocol::BEP05::Packets::Render;
   no warnings 'redefine';
   sub Net::BitTorrent::Network::Utility::sockaddr($$){ 
     my $rez = AnyEvent::Socket::pack_sockaddr( $_[1], AnyEvent::Socket::parse_address($_[0]) );
-    warn "Resolved $_[0]:$_[1] to ...";
+    # warn "Resolved $_[0]:$_[1] to ...";
     confess "init udp4_host, and upd6_host, in dht->new" if $_[0] eq '0.0.0.0';
     $rez;
     }
@@ -68,7 +68,7 @@ sub setup : Test(setup) {
     # mock 'send' so we don't do real io
     mock_core('send', sub {
         my ($sock, $packet, $flags, $to) = @_;
-        warn "Core::Send called with ".sockaddr2ip(getsockname($sock))." ".length($packet);
+        # warn "Core::Send called with ".sockaddr2ip(getsockname($sock))." ".length($packet);
         return length($packet);
         });
 
@@ -160,7 +160,7 @@ sub sends_ping_to_boot_nodes_at_new : Tests {
           is $decoded{'ask'}, $decoded{'them'}, "whom and about is same ".$decoded{'ask'};
           });
         }
-    mock_core('send', sub {warn "another send"});
+    mock_core('send', sub {length($_[1])});
 
     Net::BitTorrent::Protocol::BEP05::RoutingTable->mock('del_node', sub {confess "DEL_NODE"});
     Net::BitTorrent::Protocol::BEP05::Node->mock('_build_ping_timer', sub {{}});
@@ -237,7 +237,6 @@ sub get_peers_calls_node_get_peers : Tests {
     }
 
 sub announce_peer_calls_node_announce_peer_later : Tests {
-    warn "announce_peer_calls_node_announce_peer_later";
     my $tester=shift;
 
     my $dht = Class->new(udp4_host => '127.0.0.1', udp6_host => '::0');
