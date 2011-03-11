@@ -28,10 +28,11 @@ package Net::BitTorrent::DHT::Standalone;
             . '_sock' => (is         => 'ro',
                           init_arg   => undef,
                           isa        => 'GlobRef',
-                          lazy_build => 1,
                           weak_ref   => 1,
+                          predicate  => "has_udp${ipv}_sock",
                           writer     => '_set_udp' . $ipv . '_sock'
             );
+
         has 'udp' 
             . $ipv
             . '_host' => (is      => 'ro',
@@ -146,6 +147,7 @@ package Net::BitTorrent::DHT::Standalone;
         }
         return $server;
     }
+
     around '_on_udp4_in' => sub {
         my ($c, $s, $sock, $sockaddr, $host, $port, $data, $flags) = @_;
         my $rule = $s->ip_filter->is_banned($host);
