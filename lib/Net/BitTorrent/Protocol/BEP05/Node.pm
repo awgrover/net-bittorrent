@@ -3,6 +3,7 @@ package Net::BitTorrent::Protocol::BEP05::Node;
     use Moose;
     use Moose::Util::TypeConstraints;
     use AnyEvent;
+    use Carp;
     use lib '../../../../../lib';
     use Net::BitTorrent::Types qw[NBTypes::DHT::NodeID];
     use Net::BitTorrent::Protocol::BEP05::Packets qw[:all];
@@ -52,7 +53,6 @@ package Net::BitTorrent::Protocol::BEP05::Node;
                       predicate  => 'has_routing_table',
                       writer     => '_routing_table',
                       weak_ref   => 1,
-                      lazy_build => 1,
                       handles    => [qw[send dht tracker]]
     );
     around 'send' => sub {
@@ -66,6 +66,7 @@ package Net::BitTorrent::Protocol::BEP05::Node;
                      coerce    => 1
     );
     after '_nodeid' => sub {
+        confess "You must provide a routing_table for a Node if you set the nodeid" if !$_[0]->routing_table;
         $_[0]->routing_table->assign_node($_[0]);
         $_[0]->routing_table->del_node($_[0]) if !$_[0]->has_bucket;
     };
