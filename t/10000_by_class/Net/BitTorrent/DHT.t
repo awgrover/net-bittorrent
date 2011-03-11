@@ -274,13 +274,14 @@ sub announce_peer_calls_node_announce_peer_later : Tests {
     AnyEvent::Impl::Perl::one_event for (1..10); # while (!$cv->ready);
     }
 
-sub find_node_calls_node_find_node : Tests {
+sub find_node_causes_node_find_node : Tests {
     my $dht = Class->new(udp4_host => '127.0.0.1', udp6_host => '::0');
     my $sender = ['127.0.0.2', $dht->port];
     my $sender_nodeid = Bit::Vector->new_Dec(160,0x91234);
     $dht->ipv4_routing_table->add_node($sender)->_nodeid($sender_nodeid);
 
     my $cv = AE::cv;
+    # will be called via a timer
     Net::BitTorrent::Protocol::BEP05::Node->mock('find_node')
       ->with(0 => sub{
           my $self=shift;
@@ -291,7 +292,62 @@ sub find_node_calls_node_find_node : Tests {
     $dht->find_node( Bit::Vector->new_Dec(160, 0x7654) );
     $cv->recv;
     }
-  
+
+sub incoming_udp_discards_bad_packets : Tests {
+
+  my $dht = Class->new(udp4_host => '127.0.0.1', udp6_host => '::0');
+
+  # bad packets don't
+  my @bad_source = ( '127.0.0.3', 888 );
+  Net::BitTorrent::DHT->mock('find_or_add_node')
+    ->with(1 => \@bad_source)
+    ->never;
+
+  # Since I mock _on_udp6_in, the $sock, $sockaddr, and $flags can be dumy
+  my $bad_data = "bad data";
+  for my $prot ((4,6)) {
+    my $oner = "_on_udp${prot}_in";
+    $dht->$oner( undef, undef, @bad_source, $bad_data, undef );
+    }
+
+  is $dht->_recv_invalid_count, 2, 'saw the 2 bad packet';
+  is $dht->_recv_invalid_length, 2*length($bad_data), 'saw the right amount of bad data';
+  }
+
+sub incoming_udp_adds_to_routing : Tests {
+
+  subtest "incoming_udp_adds_to_routing", sub {
+    my $dht = Class->new(udp4_host => '127.0.0.1', udp6_host => '::0');
+    # Good packets do
+    my @good_source = ( '127.0.0.4', 4441 );
+    my $message = Net::BitTorrent::Protocol::BEP05::Packets::build_dht_query_ping("trans1",
+                                        pack('H*', $dht->nodeid->to_Hex)
+                                        );
+    Net::BitTorrent::DHT->mock('find_or_add_node')
+      ->with(1 => \@good_source)
+      ->twice
+      ->returns(sub{ Net::BitTorrent::Protocol::BEP05::Node->new(host=> '127.0.0.9', port=>1, routing_table=>$dht->ipv4_routing_table)});
+
+    for my $prot ((4,6)) {
+      my $oner = "_on_udp${prot}_in";
+      ok 1,"Calling $oner";
+      $dht->$oner( undef, undef, @good_source, $message, undef );
+      }
+    
+    # remove these 2 when the todo is done
+      is $dht->_recv_requests_count, 1, 'saw the 2 good messages';
+      is $dht->_recv_requests_length,length($message), 'saw the right amount of data';
+    TODO : {
+      local $TODO = 'udp6 handling not implemented';
+      is $dht->_recv_requests_count, 2, 'saw the 2 good messages';
+      is $dht->_recv_requests_length, 2*length($message), 'saw the right amount of data';
+      }
+
+    done_testing;
+    };
+  ok 1,"OUT";
+  }
+
 use Bit::Vector; # we add to it
 package Bit::Vector;
 # Provide smartmatch, semantics is 'eq'. convert numberish things to a bit:vector for comparison
