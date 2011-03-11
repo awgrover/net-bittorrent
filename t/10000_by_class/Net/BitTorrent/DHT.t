@@ -274,6 +274,24 @@ sub announce_peer_calls_node_announce_peer_later : Tests {
     AnyEvent::Impl::Perl::one_event for (1..10); # while (!$cv->ready);
     }
 
+sub find_node_calls_node_find_node : Tests {
+    my $dht = Class->new(udp4_host => '127.0.0.1', udp6_host => '::0');
+    my $sender = ['127.0.0.2', $dht->port];
+    my $sender_nodeid = Bit::Vector->new_Dec(160,0x91234);
+    $dht->ipv4_routing_table->add_node($sender)->_nodeid($sender_nodeid);
+
+    my $cv = AE::cv;
+    Net::BitTorrent::Protocol::BEP05::Node->mock('find_node')
+      ->with(0 => sub{
+          my $self=shift;
+          $cv->send;
+          $self->nodeid ~~ $sender_nodeid;
+          })
+      ->at_least_once;
+    $dht->find_node( Bit::Vector->new_Dec(160, 0x7654) );
+    $cv->recv;
+    }
+  
 use Bit::Vector; # we add to it
 package Bit::Vector;
 # Provide smartmatch, semantics is 'eq'. convert numberish things to a bit:vector for comparison
@@ -326,7 +344,6 @@ sub bv_smart {
             
 
     }
-
 
 $PACKAGE->runtests() if !caller;
 1;
