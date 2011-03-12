@@ -80,7 +80,7 @@ package Net::BitTorrent::DHT;
         my $rule = $s->ip_filter->is_banned($node->host);
         if (defined $rule) {
             $s->trigger_ip_filter(
-                           {protocol => ($node->ipv6 ? 'udp6' : 'udp4'),
+                           {protocol => ($node->is_ipv6 ? 'udp6' : 'udp4'),
                             severity => 'debug',
                             event    => 'ip_filter',
                             address => [$node->host, $node->port],
@@ -91,7 +91,7 @@ package Net::BitTorrent::DHT;
             return $s->routing_table->del_node($node);
         }
         my $sock
-            = $node->ipv6 && $s->has_udp6_sock ? $s->udp6_sock
+            = $node->is_ipv6 && $s->has_udp6_sock ? $s->udp6_sock
             : $s->has_udp4_sock ? $s->udp4_sock
             :                     ();
         my $sent = $sock ? send $sock, $packet, 0, $node->sockaddr : return;
@@ -205,9 +205,9 @@ package Net::BitTorrent::DHT;
                                 $self->ipv4_routing_table) {
                         for my $node (
                                      @{$rt->nearest_bucket($infohash)->nodes})
-                        {   
-                        $node->get_peers($infohash);
-                        }
+                            {   
+                            $node->get_peers($infohash);
+                            }
                     }
                 }
             )
@@ -321,8 +321,11 @@ package Net::BitTorrent::DHT;
                 if ($node->is_expecting($packet->{'t'})) {
                     $self->_inc_recv_replies_count;
                     $self->_inc_recv_replies_length(length $data);
+
+                    # 'v' is optional "version" of the DHT implementation
                     $node->_v($packet->{'v'})
                         if !$node->has_v && defined $packet->{'v'};
+
                     my $req
                         = $node->del_request($packet->{'t'}); # For future ref
                     $req->{'cb'}->($packet, $host, $port)
