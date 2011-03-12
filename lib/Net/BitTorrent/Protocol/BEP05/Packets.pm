@@ -14,6 +14,7 @@ package Net::BitTorrent::Protocol::BEP05::Packets;
         build_dht_reply_find_node     build_dht_query_find_node
         build_dht_reply_error                                      ];
     our $MAJOR = 0; our $MINOR = 74; our $DEV = 13; our $VERSION = sprintf('%0d.%03d' . ($DEV ? (($DEV < 0 ? '' : '_') . '%03d') : ('')), $MAJOR, $MINOR, abs $DEV);
+    # Not part of BEP 005:
     my $v = 'NB' . pack 'CC', $MAJOR * 1000, $MINOR;
 
     #
