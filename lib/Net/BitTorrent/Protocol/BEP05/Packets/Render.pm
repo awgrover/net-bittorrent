@@ -1,4 +1,5 @@
 package Net::BitTorrent::Protocol::BEP05::Packets::Render;
+# cf http://www.bittorrent.org/beps/bep_0005.html
 use feature 'switch';
 require Exporter;
 @ISA = qw(Exporter);
