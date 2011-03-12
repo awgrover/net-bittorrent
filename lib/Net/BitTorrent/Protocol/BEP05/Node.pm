@@ -23,22 +23,28 @@ package Net::BitTorrent::Protocol::BEP05::Node;
         require Net::BitTorrent::Network::Utility;
         Net::BitTorrent::Network::Utility::sockaddr($_[0]->host, $_[0]->port);
     }
-    has 'ipv6' => (isa => 'Bool', is => 'ro', lazy_build => 1);
-    sub _build_ipv6 { length shift->sockaddr == 28 }
+
+    # just a cached predicate
+    has 'is_ipv6' => (isa => 'Bool', is => 'ro', lazy_build => 1);
+
+    sub _build_is_ipv6 { length shift->sockaddr == 28 }
+
     for my $dir (qw[in out]) {
-        has 'announce_peer_token_'
-            . $dir => (isa     => 'HashRef[Str]',
+        has "announce_peer_token_$dir"
+             => (isa     => 'HashRef[Str]',
                        is      => 'ro',
                        traits  => ['Hash'],
                        handles => {
-                               '_set_announce_peer_token_' . $dir => 'set',
-                               '_get_announce_peer_token_' . $dir => 'get',
-                               '_del_announce_peer_token_' . $dir => 'delete',
-                               'has_announce_peer_token_' . $dir  => 'defined'
+                               "_set_announce_peer_token_$dir" => 'set',
+                               "_get_announce_peer_token_$dir" => 'get',
+                               "_del_announce_peer_token_$dir" => 'delete',
+                               "has_announce_peer_token_$dir" => 'defined'
                        },
                        default => sub { {} }
             );
     }
+
+    # 'v' is optional "version" of the DHT implementation, from the incoming bencode data
     has 'v' =>
         (isa => 'Str', is => 'ro', writer => '_v', predicate => 'has_v');
     has 'bucket' => (isa       => 'Net::BitTorrent::Protocol::BEP05::Bucket',
@@ -57,7 +63,7 @@ package Net::BitTorrent::Protocol::BEP05::Node;
     );
     around 'send' => sub {
         my ($code, $self, $packet, $reply) = @_;
-        $code->($self, $self, $packet, !!$reply);
+        $code->($self, $self, $packet, !!$reply); # this looks redundant
     };
     has 'nodeid' => (isa       => 'NBTypes::DHT::NodeID',
                      is        => 'ro',
@@ -112,13 +118,13 @@ package Net::BitTorrent::Protocol::BEP05::Node;
     has 'seen' => (
         isa        => 'Int',
         is         => 'ro',
-        lazy_build => 1,
         init_arg   => undef,
         writer     => '_set_seen',
         handles    => {
             touch  => sub { shift->_set_seen(time) },
             active => sub {
-                return time - shift->seen <= 15 * 60;
+                my $seen = shift->seen;
+                return $seen && (time - $seen <= 15 * 60);
                 }
         }
     );
@@ -142,7 +148,7 @@ package Net::BitTorrent::Protocol::BEP05::Node;
         my ($self) = @_;
         require Scalar::Util;
         Scalar::Util::weaken $self;
-        $self->_ping_timer(AE::timer(rand(30), 0, sub { $self->ping }));
+        $self->_ping_timer(AE::timer(rand(30), 0, sub { $self && $self->ping }));
     };
     has 'birth' => (is         => 'ro',
                     isa        => 'Int',
