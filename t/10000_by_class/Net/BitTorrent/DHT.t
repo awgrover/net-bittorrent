@@ -348,6 +348,20 @@ sub incoming_udp_adds_to_routing : Tests {
   ok 1,"OUT";
   }
 
+sub ip_filter : Tests {
+  TODO : {
+    local $TODO = "Write tests for the ip_filtering and filtering in send";
+    ok 0, "Write tests for the ip_filtering and filtering in send";
+    }
+  }
+
+sub packet_handling : Tests {
+  TODO : {
+    local $TODO = "Write tests for the packet_handling";
+    ok 0, "Write tests for the packet_handling";
+    }
+  }
+
 use Bit::Vector; # we add to it
 package Bit::Vector;
 # Provide smartmatch, semantics is 'eq'. convert numberish things to a bit:vector for comparison
