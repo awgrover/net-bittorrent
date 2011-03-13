@@ -13,7 +13,8 @@ package Net::BitTorrent::Protocol::BEP03::Bencode;
 
     #
     sub bencode {
-        my $ref = shift // return;
+        my $ref = shift;
+        return '0:' if !defined $ref;
         return (  ((length $ref) && $ref =~ m[^([-\+][1-9])?\d*$])
                 ? ('i' . $ref . 'e')
                 : (length($ref) . ':' . $ref)
@@ -31,11 +32,12 @@ package Net::BitTorrent::Protocol::BEP03::Bencode;
     }
 
     sub bdecode {
+      # 2nd arg indicates "Return (decoded, remaining)"
         my $string = shift // return;
         my ($return, $leftover);
         if ($string =~ s[^(0+|[1-9]\d*):][]) {
             my $size = $1;
-            $return = '' if $size =~ m[^0+$];
+            $return = '' if $size == 0;
             $return .= substr($string, 0, $size, '');
             return if length $return < $size;
             return $_[0] ? ($return, $string) : $return;    # byte string
