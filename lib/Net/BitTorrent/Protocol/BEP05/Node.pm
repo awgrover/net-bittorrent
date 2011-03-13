@@ -10,6 +10,8 @@ package Net::BitTorrent::Protocol::BEP05::Node;
     use 5.010.000;
     our $MAJOR = 0; our $MINOR = 74; our $DEV = 13; our $VERSION = sprintf('%0d.%03d' . ($DEV ? (($DEV < 0 ? '' : '_') . '%03d') : ('')), $MAJOR, $MINOR, abs $DEV);
 
+    use overload '""' => sub { my $self=shift; sprintf "<%s %s:%d>",(overload::StrVal($self) =~ /^Net::BitTorrent::Protocol::(.+)/)[0],$self->host, $self->port };
+
     #
     sub BUILD {1}
 

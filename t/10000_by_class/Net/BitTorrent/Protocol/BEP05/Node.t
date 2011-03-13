@@ -169,11 +169,68 @@ sub expects_replies : Tests {
     );
 
   Net::BitTorrent::Protocol::BEP05::Node->mock('has_announce_peer_token_in')->returns(sub {1});
+  Net::BitTorrent::Protocol::BEP05::Node->mock('_get_announce_peer_token_in')->returns(sub {'x'});
 
   while (my ($type, $args) = each %requests) {
     $node->$type(@$args);
     ok ((grep {$_->{'type'} eq $type} values %{$node->outstanding_requests}), "expecting reply: $type");
-    warn (join(", ",map {$_->{'type'}} values %{$node->outstanding_requests}));
+    }
+  }
+
+sub sends_reply : Tests {
+  my $dht = Net::BitTorrent::DHT->new(
+    nodeid => 0x12345, 
+    udp4_host => '127.0.0.1', 
+    udp6_host => '::0',
+    );
+  my $node = $dht->find_or_add_node(['127.0.0.3', 736]);
+  $node->_nodeid(0x6a45);
+
+  Net::BitTorrent::Protocol::BEP05::Node->unmock('send');
+
+  my %tests = (
+    _reply_ping => { 
+      args => [], 
+      test => sub { $dht->nodeid ~~ "0x".$_[0]->{'alive'} } 
+      },
+    _reply_find_node => { 
+      args => [Bit::Vector->new_Hex(160, 0x555)], 
+      test => sub { defined($_[0]->{'said'}) && [$node->host, $node->port] ~~ $_[0]->{'node'} } 
+      },
+    _reply_get_peers => { 
+      args => [Bit::Vector->new_Hex(160, 0x634)], 
+      # this is the "i don't know" response
+      test => sub { defined($_[0]->{'said'}) && [$node->host, $node->port] ~~ $_[0]->{'node'} } 
+      },
+    _reply_announce_peer => { 
+      args => [Bit::Vector->new_Hex(160, 0x634), {token => 'x'}], 
+      # we signal error since we never actually have any peers
+      test => sub { defined($_[0]->{'error'}->{'203'}) } 
+      }, 
+    );
+
+  while (my ($method, $info) = each %tests) {
+    Net::BitTorrent::Protocol::BEP05::Node->mock('send')
+      ->with(
+        0 => $node,
+        1 => sub {
+          my ($packet) = @_;
+          my %rendered = render_packet($packet);
+          # warn "Testing for $method...";
+          # warn "\tdht ",$dht->nodeid, " node ",$node->nodeid;
+          # warn "\tPacket for $method: ",Dumper(\%rendered); 
+          my $rez = unpack('H*', $method) eq $rendered{'transaction_id'} && $info->{'test'}->(\%rendered);
+          # warn "\tmatched? $rez";
+          $rez;
+          })
+      ->once
+      ->returns(sub{ ok 1,"Sent packet for $method"});
+    }
+  Net::BitTorrent::Protocol::BEP05::Node->mock('send')->never;
+
+  while (my ($method, $info) = each %tests) {
+    # warn "TRY $method";
+    $node->$method($method, @{$info->{'args'}});
     }
   }
 
@@ -191,7 +248,6 @@ sub bv_smart {
     if (blessed($operand) && $operand->isa('Bit::Vector')) {
         $self eq $operand;
         }
-    # We don't try to convert the $operand
     elsif (ref($operand)) {
         return $operand ~~ $self;
         # sadly, we can't call SUPER::~~
@@ -202,7 +258,7 @@ sub bv_smart {
         $other->from_Dec($operand);
         $self eq $other;
         }
-    elsif ($operand =~ /^0x/) {
+    elsif ($operand =~ /^0x[0-9a-f]+$/i) {
         my $other = $self->Shadow;
         $other->from_Hex($operand);
         $self eq $other;

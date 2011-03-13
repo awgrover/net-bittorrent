@@ -87,11 +87,11 @@ sub render_packet {
                         my @nodes = uncompact_ipv4($nodes);
                         if (scalar(@nodes) > 1) {
                             $decoded{'closer'} = @nodes;
-                            $decoded_string .= "closer: ".join(",",map {Net::BitTorrent::Protocol::BEP05::Node::render_node($_)} @nodes);
+                            $decoded_string .= "closer: ".join(",", @nodes);
                             }
                         else {
                             $decoded{'node'} = $nodes[0];
-                            $decoded_string .= "node: ".Net::BitTorrent::Protocol::BEP05::Node::render_node($nodes[0]);
+                            $decoded_string .= "node: $node";
                             }
                         $is_ping = 0;
                         }
