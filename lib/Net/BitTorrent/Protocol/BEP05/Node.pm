@@ -4,7 +4,6 @@ package Net::BitTorrent::Protocol::BEP05::Node;
     use Moose::Util::TypeConstraints;
     use AnyEvent;
     use Carp;
-    use lib '../../../../../lib';
     use Net::BitTorrent::Types qw[NBTypes::DHT::NodeID];
     use Net::BitTorrent::Protocol::BEP05::Packets qw[:all];
     use 5.010.000;

@@ -4,28 +4,13 @@ our $PACKAGE=__PACKAGE__;
 # For mocking 'send' :
 BEGIN { *{CORE::GLOBAL::send} = sub { CORE::send $_[0],$_[1],$_[2] } }
 
-use Time::HiRes;
-use Carp;
-sub main::check_slow {
-  my $msg = shift if !ref $_[0];
-  # warn "Watching ",join(',',(caller(1))[1,2]);
-  my $start = Time::HiRes::time;
-  my $rez = $_[0]->();
-  my $elapsed = Time::HiRes::time - $start;
-  if ($elapsed > .01) {
-    warn "SLOW $msg, $elapsed, at ",join(',',caller(1));
-    }
-  $rez;
-  }
-
 use strict;
 use warnings;
-our $MAJOR = 0; our $MINOR = 1; our $DEV = 1; our $VERSION = sprintf('%0d.%03d' . ($DEV ? (($DEV < 0 ? '' : '_') . '%03d') : ('')), $MAJOR, $MINOR, abs $DEV);
+our $MAJOR = 0; our $MINOR = 74; our $DEV = 13; our $VERSION = sprintf('%0d.%03d' . ($DEV ? (($DEV < 0 ? '' : '_') . '%03d') : ('')), $MAJOR, $MINOR, abs $DEV);
 use Test::More;
 use parent 'Test::Class';
 use lib '../../../../lib', 'lib';
 use 5.010.000;
-use Test::Moose;
 use AnyEvent::Impl::Perl;   # Timing is different than with EV. Go figure.
 use AnyEvent;
 use Test::Mock::Method;
@@ -233,58 +218,6 @@ sub sends_reply : Tests {
     $node->$method($method, @{$info->{'args'}});
     }
   }
-
-use Bit::Vector; # we add to it
-package Bit::Vector;
-# Provide smartmatch, semantics is 'eq'. convert numberish things to a bit:vector for comparison
-use Bit::Vector::Overload;
-use Scalar::Util 'blessed';
-use overload '~~' => 'bv_smart';
-
-sub bv_smart {
-    my ($self,$operand,$reverse) = @_;
-    ($self,$operand) = ($operand,$self) if $reverse;
-
-    if (blessed($operand) && $operand->isa('Bit::Vector')) {
-        $self eq $operand;
-        }
-    elsif (ref($operand)) {
-        return $operand ~~ $self;
-        # sadly, we can't call SUPER::~~
-        die "Don't know how to do ~~ for ".ref($self)." ~~ ".(ref($operand) || $operand);
-        }
-    elsif ($operand =~ /^\d+$/) {
-        my $other = $self->Shadow;
-        $other->from_Dec($operand);
-        $self eq $other;
-        }
-    elsif ($operand =~ /^0x[0-9a-f]+$/i) {
-        my $other = $self->Shadow;
-        $other->from_Hex($operand);
-        $self eq $other;
-        }
-    elsif ($operand =~ /^0b/) {
-        # bit vector doesn't tolerate 0bxxxx for binary strings
-        my $other = $self->Shadow;
-        $other->from_Bin(substr $operand, 2);
-        $self eq $other;
-        }
-    else {
-        my $rez = eval { $self eq $operand; };
-        if ($@) {
-            my $x = index($@, "Bit::Vector::bv_smart: index out of range in overloaded 'cmp' operator")==0;
-            if ($x==0) {
-                die "You tried to do a smartmatch of ".ref($self)." ~~ ".$operand.". But, that Bit::Vector's -> Configuration apparently had 'input = bit indices', and $operand doesn't look like decimal, hex or binary, so $operand was considered an indice: ".$self->Configuration;
-                }
-            else {
-                die $@."::: $x";
-                }
-            }
-        $rez;
-        }
-            
-
-    }
 
 $PACKAGE->runtests() if !caller;
 1;
