@@ -11,6 +11,9 @@ package Net::BitTorrent::Protocol::BEP05::Node;
 
     use overload '""' => sub { my $self=shift; sprintf "<%s %s:%d>",(overload::StrVal($self) =~ /^Net::BitTorrent::Protocol::(.+)/)[0],$self->host, $self->port };
 
+    use constant GOOD_UNTIL => 15 * 60; # in seconds
+    use constant GET_PEERS_RETRY => 15; # seconds
+
     #
     sub BUILD {1}
 
@@ -125,7 +128,7 @@ package Net::BitTorrent::Protocol::BEP05::Node;
             touch  => sub { shift->_set_seen(time) },
             active => sub {
                 my $seen = shift->seen;
-                return $seen && (time - $seen <= 15 * 60);
+                return $seen && (time - $seen <= GOOD_UNTIL);
                 }
         }
     );
@@ -183,7 +186,7 @@ package Net::BitTorrent::Protocol::BEP05::Node;
         return
             if $self->defined_prev_find_node($target->to_Hex)
                 && $self->get_prev_find_node($target->to_Hex)
-                > time - (60 * 15);
+                > time - (GOOD_UNTIL - 60); # to avoid a race condition
         state $tid = 'a';
         my $packet =
             build_dht_query_find_node('fn_' . $tid,
@@ -216,10 +219,12 @@ package Net::BitTorrent::Protocol::BEP05::Node;
 
     sub get_peers {
         my ($self, $info_hash) = @_;
+        # don't do it again within 15 seconds
+        # warn "get_peers to ",$info_hash->to_Hex," last was ",$self->defined_prev_get_peers($info_hash->to_Hex) && ((time - $self->get_prev_get_peers($info_hash->to_Hex)) / 60)," minutes ago";
         return
             if $self->defined_prev_get_peers($info_hash->to_Hex)
                 && $self->get_prev_get_peers($info_hash->to_Hex)
-                > time - (60 * 15);
+                > time - (GET_PEERS_RETRY - 1);
         state $tid = 'a';
         my $packet =
             build_dht_query_get_peers('gp_' . $tid,

@@ -97,6 +97,8 @@ package Net::BitTorrent::Network::Utility;
 
     sub unpack_sockaddr ($) {
         my ($packed_host) = @_;
+        # too easy to call with an array
+        use Carp; confess "proto is \$" if !defined($packed_host) || $packed_host =~ /^1$/;
         return
             length $packed_host == 28
             ? (unpack('SnLa16L', $packed_host))[1, 3]

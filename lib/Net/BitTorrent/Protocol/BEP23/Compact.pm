@@ -2,7 +2,7 @@ package Net::BitTorrent::Protocol::BEP23::Compact;
 {
     use strict;
     use warnings;
-    use Carp qw[carp];
+    use Carp qw[carp confess];
     use Fcntl ':flock';
     our $MAJOR = 0; our $MINOR = 74; our $DEV = 13; our $VERSION = sprintf('%0d.%03d' . ($DEV ? (($DEV < 0 ? '' : '_') . '%03d') : ('')), $MAJOR, $MINOR, abs $DEV);
     use vars qw[@EXPORT_OK %EXPORT_TAGS];
@@ -31,6 +31,7 @@ package Net::BitTorrent::Protocol::BEP23::Compact;
                     int $port;
             }
         }
+        confess "No peers compacted" if !$return; 
         return $return;
     }
 

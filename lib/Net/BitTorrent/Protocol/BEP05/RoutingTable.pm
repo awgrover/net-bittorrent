@@ -43,6 +43,7 @@ package Net::BitTorrent::Protocol::BEP05::RoutingTable;
         confess "Requires [ip, port]" if (ref($node) ne 'ARRAY' || scalar(@$node) != 2);
 
         my $sockaddr = sockaddr($node->[0], $node->[1]);
+        warn "Bogus ip/port (".join(',',@$node).")" if !$sockaddr;
         return undef if !$sockaddr;
 
         if (my $n = $self->find_node_by_sockaddr($sockaddr)) {
@@ -104,6 +105,7 @@ package Net::BitTorrent::Protocol::BEP05::RoutingTable;
 
     sub nearest_bucket {
         my ($self, $target) = @_;
+        confess "Expected bit-vector (node-id): $target, ",ref($target) if !$target || !$target->isa('Bit::Vector');
         for my $bucket (reverse @{$self->buckets}) {
             return $bucket if $bucket->floor->Lexicompare($target) != 1;
         }

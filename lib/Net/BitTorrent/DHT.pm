@@ -77,6 +77,7 @@ package Net::BitTorrent::DHT;
     #
     sub send {
         my ($s, $node, $packet, $reply) = @_;
+        # warn "Send ".length($packet)," to ",$node->host,":",$node->port," ",$node->nodeid ? $node->nodeid : "<no-nodeid>";
         my $rule = $s->ip_filter->is_banned($node->host);
         if (defined $rule) {
             $s->trigger_ip_filter(
@@ -192,20 +193,25 @@ package Net::BitTorrent::DHT;
         $infohash = $onesixty_constraint->coerce($infohash);
         require Scalar::Util;
         Scalar::Util::weaken $self;
+        # warn "\@dht set timer for ".$self."->get_peers(".$infohash->to_Hex.") ",__LINE__;
         my $quest = [
             $infohash,
             $code, # only called if a response has "values", maybe multiple times
             [],
             AE::timer(
                 0,
-                0.25 * 60,
+                Net::BitTorrent::Protocol::BEP05::Node::GET_PEERS_RETRY(),
+                # Our caller has to give up the ref to stop retry
+                # node->get_peers won't allow another request for GET_PEERS_RETRY seconds
                 sub {
+                    # warn "\@dht\@timer triggering ->get_peers ",__LINE__;
                     return if !$self;
                     for my $rt ($self->ipv6_routing_table,
                                 $self->ipv4_routing_table) {
                         for my $node (
                                      @{$rt->nearest_bucket($infohash)->nodes})
                             {   
+                            # warn "get_peers $node for ".$infohash->to_Hex;
                             $node->get_peers($infohash);
                             }
                     }
@@ -295,6 +301,7 @@ package Net::BitTorrent::DHT;
     sub _on_udp4_in {
         my ($self, $sock, $sockaddr, $host, $port, $data, $flags) = @_;
         my $packet = bdecode $data;
+        # warn "RECV: ".render_packet($data); use Net::BitTorrent::Protocol::BEP05::Packets::Render;
         if (   !$packet
             || !ref $packet
             || ref $packet ne 'HASH'
@@ -317,6 +324,7 @@ package Net::BitTorrent::DHT;
 
         #
         if ($packet->{'y'} eq 'r') {
+            # warn "Recv: a response...";
             if (defined $packet->{'r'}) {
                 if ($node->is_expecting($packet->{'t'})) {
                     $self->_inc_recv_replies_count;
@@ -360,6 +368,7 @@ package Net::BitTorrent::DHT;
                         $quest->[1]->($quest->[0], $node, \@nodes);
                     }
                     elsif ($type eq 'get_peers') {
+                        # warn "Recv: handle response get_peers";
 
                         # TODO - store token by id
                         if (!(    defined $packet->{'r'}{'nodes'}
@@ -446,8 +455,8 @@ package Net::BitTorrent::DHT;
                     $self->_inc_recv_invalid_length(length $data);
 
                     warn "Got a RECV, but $node wasn't expecting one for transaction ".$packet->{'t'};
-                    warn "   ".$packet->{'t'}.": outstanding " # .Dumper($node->outstanding_requests);
-                     .join(", ",map {"[$_] ".$node->get_request($_)->{'type'}} keys%{$node->outstanding_requests});
+                    warn "   ".$packet->{'t'}.": outstanding "
+                     .join("\n\t",map {"[$_".join("",map {sprintf "%X", $_} unpack('W*',$_))."] ".$node->get_request($_)->{'type'}.Dumper($node->get_request($_))} keys%{$node->outstanding_requests});
                 }
             }
         }

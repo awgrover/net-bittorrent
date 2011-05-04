@@ -12,6 +12,8 @@ use Data::Dumper;
 
 sub render_packet {
         my ($packet) = @_;
+        # returns a string or a struct
+        # The struct should have a 'type' key
         my %Type = ( q => 'query', r => 'response', e => 'error' );
 
         my $decoded_string = "";
@@ -31,6 +33,7 @@ sub render_packet {
                   $decoded_string .= 'error(';
                   $decoded_string .= $packet_data->{'e'}->[0].":".$packet_data->{'e'}->[1];
 
+                  $decoded{'type'} = 'error';
                   $decoded{'error'} = { $packet_data->{'e'}->[0] => $packet_data->{'e'}->[1] };
 
                   $decoded_string .= ')';
@@ -42,6 +45,7 @@ sub render_packet {
                     given ( $packet_data->{'q'} ) {
                         # $decoded_string .= $decoded{'ask'}."->" if $decoded{'ask'} ne unpack('H40', $self->nodeid);
                         $decoded_string .= "$_(";
+                        $decoded{'type'} = $_;
 
                         when ('ping') {
                             $decoded{'node_id'} = unpack('H40', $packet_data->{'a'}->{'id'});
@@ -86,10 +90,12 @@ sub render_packet {
                     if (my $nodes = $decoded_r->{'nodes'}) {
                         my @nodes = uncompact_ipv4($nodes);
                         if (scalar(@nodes) > 1) {
+                            $decoded{'type'} = 'found_nodes_closer';
                             $decoded{'closer'} = @nodes;
-                            $decoded_string .= "closer: ".join(",", @nodes);
+                            $decoded_string .= "closer: ".join(", ", map {$_->[0].":".$_->[1]} @nodes); use Data::Dumper;
                             }
                         else {
+                            $decoded{'type'} = 'found_node';
                             $decoded{'node'} = $nodes[0];
                             $decoded_string .= "node: $node";
                             }
@@ -97,12 +103,14 @@ sub render_packet {
                         }
                     # get_peers
                     if (my $peers = $decoded_r->{'values'}) {
+                        $decoded{'type'} = 'got_peers';
                         $decoded{'peers'} = [map {uncompact($_)} @$peers];
                         $decoded_string .= ", peers: ".join(",",map {ip_and_port($_)} @$peers);
                         $is_ping = 0;
                         }
                     # ping
                     if ($is_ping) {
+                        $decoded{'type'} = 'pong';
                         $decoded{'alive'} = delete $decoded{'said'};
                         $decoded_string .= "alive"
                         }
