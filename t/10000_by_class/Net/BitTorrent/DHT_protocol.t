@@ -161,7 +161,6 @@ sub get_peers_have_closer : Tests {
   my @closer_holders;
   push @closer_holders, near_node($Resource_Id_To_Query) for (1..2);
 
-
   push @packets_received, my $sentCV = AE::cv;
 
   # warn "Has closer:";
@@ -169,22 +168,26 @@ sub get_peers_have_closer : Tests {
     push @nodes, rt_node($Resource_Id_To_Query, \@get_peers_called);
     $sentCV->begin;
 
-    expect_send(to => $nodes[-1], type => 'get_peers', for => $Resource_Id_To_Query, 
+    my $has_closer = $nodes[-1];
+    expect_send(to => $has_closer, type => 'get_peers', for => $Resource_Id_To_Query, 
       reply => sub {
         my ($decoded) = @_;
         # we reply with the closer_holders
         my $trans = pack "C*", map {hex($_)} $decoded->{'transaction_id'} =~ /([a-z0-9]{2})/ig;
         # warn "sent trans $trans:",$decoded->{'transaction_id'},"!";
         $sentCV->end;
-        Net::BitTorrent::Protocol::BEP05::Packets::build_dht_reply_get_peers(
+        my $compacted = 
+          Net::BitTorrent::Protocol::BEP23::Compact::compact_ipv4(
+            map { [$_->host, $_->port] } @closer_holders
+            );
+        my $snd = Net::BitTorrent::Protocol::BEP05::Packets::build_dht_reply_get_peers(
           $trans,
           $decoded->{'for'},
           [], # no values
-          Net::BitTorrent::Protocol::BEP23::Compact::compact_ipv4(
-            map { [$_->host, $_->port] } @closer_holders
-            ),
-          "ticket".$nodes[-1]->host.":".$nodes[-1]->port
-          )
+          $compacted,
+          "ticket".$has_closer->host.":".$has_closer->port
+          );
+        $snd;
       })
       ->once
       ->set_cond_var(\@packets_sent)
@@ -315,7 +318,7 @@ sub expect_send {
   # to=>$node, type=>$packet_type, other_decoded_keys=>$value, reply => sub{}
   my @non_test = qw(to reply type reply_wait); # things that aren't test::more'd
   my %args = @_;
-  my $mocked = mock_core('send');
+  my $mocked = mock_core('send', at=>1);
   if ($args{'to'}) {
       $mocked->with(
         3 => sub{

@@ -89,6 +89,7 @@ sub render_packet {
                     # find_node, or get_peers:ask_others
                     if (my $nodes = $decoded_r->{'nodes'}) {
                         my @nodes = uncompact_ipv4($nodes);
+                        warn "decoded 'nodes' to ",Dumper(\@nodes);
                         if (scalar(@nodes) > 1) {
                             $decoded{'type'} = 'found_nodes_closer';
                             $decoded{'closer'} = @nodes;
@@ -97,15 +98,15 @@ sub render_packet {
                         else {
                             $decoded{'type'} = 'found_node';
                             $decoded{'node'} = $nodes[0];
-                            $decoded_string .= "node: $node";
+                            $decoded_string .= "node: ".join(":",@{$nodes[0]});
                             }
                         $is_ping = 0;
                         }
                     # get_peers
                     if (my $peers = $decoded_r->{'values'}) {
                         $decoded{'type'} = 'got_peers';
-                        $decoded{'peers'} = [map {uncompact($_)} @$peers];
-                        $decoded_string .= ", peers: ".join(",",map {ip_and_port($_)} @$peers);
+                        $decoded{'peers'} = [map {uncompact_ipv4($_)} @$peers];
+                        $decoded_string .= ", peers: ".join(",",map {join ":", uncompact_ipv4($_)} @$peers);
                         $is_ping = 0;
                         }
                     # ping
