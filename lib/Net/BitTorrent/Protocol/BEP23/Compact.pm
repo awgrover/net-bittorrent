@@ -17,18 +17,17 @@ package Net::BitTorrent::Protocol::BEP23::Compact;
     PEER: for my $peer (@peers) {
             next if not $peer;
             my ($ip, $port) = @$peer;
-            if ($ip
-                !~ m[^(?:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.]?){4})$]
-                )
-            {   carp 'Invalid IPv4 address: ' . $ip;
-            }
-            elsif ($port > 2**16) {
+
+            if ($port < 0 || $port >= 2**16) {
                 carp 'Port number beyond ephemeral range: ' . $port;
+                next PEER;
             }
-            else {
-                $return .= pack 'C4n',
-                    ($ip =~ m[^([\d]+)\.([\d]+)\.([\d]+)\.([\d]+)$]),
-                    int $port;
+            elsif (my @octets = $ip =~ /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/) {
+              foreach (@octets) { if ($_ > 255) {carp "IPv4 octect out of range $ip"; next PEER }}
+              $return .= pack 'C4n', @octets, int $port;
+              }
+            else {   
+              carp 'Invalid IPv4 address: ' . $ip;
             }
         }
         confess "No peers compacted" if !$return; 
@@ -36,12 +35,12 @@ package Net::BitTorrent::Protocol::BEP23::Compact;
     }
 
     sub uncompact_ipv4 {
-        return $_[0]
-            ? map {
-            my (@h) = unpack 'C4n', $_;
-            [sprintf('%s.%s.%s.%s', @h), $h[-1]]
-            } $_[0] =~ m[(.{6})]g
-            : ();
+      my @h_p = unpack "(C4n)*", $_[0];
+      my @rez;
+      while (@h_p) {
+        push @rez, [sprintf('%s.%s.%s.%s', splice @h_p,0,4), shift @h_p];
+        }
+      @rez;
     }
 }
 1;
